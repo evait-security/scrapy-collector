@@ -23,8 +23,8 @@ class MailcollectSpider(scrapy.Spider):
         "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36 Edge/12.246",
     }
 
-    paths = []
-    emails = []
+    paths = []  # to remember the paths we've already yielded
+    emails = []  # to remember the mail adresse we've already yielded
 
     def start_requests(self):
         urls = [
@@ -34,6 +34,16 @@ class MailcollectSpider(scrapy.Spider):
             yield scrapy.Request(url=url, callback=self.parse)
 
     def parse(self, response):
+
+        # TODO: make this yield somehow optional, maybe via CL argument
+        yield {
+            "type": "visited path",
+            "href": response.url,
+        }
+
+        # regex from https://emailregex.com/
+        # will NOT find things like abc (at) xyz.com etc,
+        # only clean mail addresses
         mails = re.findall(
             r"([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)",
             response.css("body").get(),
@@ -47,16 +57,10 @@ class MailcollectSpider(scrapy.Spider):
                     "address": mail,
                 }
 
+        # crawling
         page_links = response.css("a")
 
         for anchor in page_links:
             href = anchor.css("a::attr(href)").get()
             if "vereinigte-hagel.net" in href:
-                if href not in self.paths:
-                    self.paths.append(href)
-                    yield {
-                        "type": "path",
-                        "href": href,
-                        "text": anchor.css("a::text").get(),
-                    }
                 yield response.follow(anchor, self.parse)
