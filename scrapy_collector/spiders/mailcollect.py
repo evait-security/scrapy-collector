@@ -29,7 +29,7 @@ class MailcollectSpider(scrapy.Spider):
     }
 
     emails = []  # to remember the mail adresse we've already yielded
-    show_paths = "false"
+    show_paths = "false"  # command line flag
 
     def start_requests(self):
         try:
@@ -48,7 +48,15 @@ class MailcollectSpider(scrapy.Spider):
         yield scrapy.Request(url=url, callback=self.parse)
 
     def parse(self, response):
+        # if we don't see an HTML body, leave
+        try:
+            response.css("body").get()
+        except scrapy.exceptions.NotSupported:
+            return
 
+        print(f"Crawling {response.url} ...")
+
+        # include visited paths in output file?
         if self.show_paths == "true":
             yield {
                 "type": "visited",
@@ -63,6 +71,7 @@ class MailcollectSpider(scrapy.Spider):
             response.css("body").get(),
         )
 
+        # process captured mail addresses
         for mail in mails:
             if mail not in self.emails:
                 self.emails.append(mail)
@@ -71,9 +80,19 @@ class MailcollectSpider(scrapy.Spider):
                     "address": mail,
                 }
 
+        # follow links
         page_links = response.css("a")
 
-        for anchor in page_links:
-            href = anchor.css("a::attr(href)").get()
-            if getattr(self, "target") in href or href.startswith("/"):
-                yield response.follow(anchor, self.parse)
+        for link in page_links:
+            href = link.css("a::attr(href)").get()
+            if not href:
+                continue
+
+            target = getattr(self, "target")
+            # only follow internal links
+            if target in href or href.startswith("/"):
+                try:
+                    yield response.follow(link, self.parse)
+                except ValueError:
+                    # we found a non-http(s) link
+                    continue
