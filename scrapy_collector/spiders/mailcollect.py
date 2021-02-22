@@ -48,6 +48,10 @@ class MailcollectSpider(scrapy.Spider):
         yield scrapy.Request(url=url, callback=self.parse)
 
     def parse(self, response):
+        if getattr(self, "target") not in response.url:
+            # we've left our target domain
+            return
+
         # if we don't see an HTML body, leave
         try:
             response.css("body").get()
