@@ -1,12 +1,17 @@
-import re
+import re, sys
 
 import scrapy
 
-### TODO: this is currently hardcoded to only work for vereinigte-hagel.net
-### next step is to generalize it to work for any domain
-
 
 class MailcollectSpider(scrapy.Spider):
+    """Tries to collect email addresses from a given domain
+
+    Will follow internal links, including subdomains.
+    Does not filter collected mail addresses from other domains,
+    all found addresses are included in the results.
+
+    Optionally outputs the followed URLs."""
+
     name = "mailcollect"
     allowed_domains = []
 
@@ -18,30 +23,39 @@ class MailcollectSpider(scrapy.Spider):
         "DOWNLOAD_DELAY": 2,
         "DOWNLOAD_MAXSIZE": 33554432,  # 32 MB
         "DOWNLOAD_WARNSIZE": 8388608,  # 8 MB
-        "LOG_LEVEL": "INFO",
+        "LOG_LEVEL": "WARN",
         "ROBOTSTXT_OBEY": False,
         "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36 Edge/12.246",
     }
 
-    paths = []  # to remember the paths we've already yielded
     emails = []  # to remember the mail adresse we've already yielded
+    show_paths = "false"
 
     def start_requests(self):
-        urls = [
-            "https://www.vereinigte-hagel.net/",
-        ]
-        for url in urls:
-            yield scrapy.Request(url=url, callback=self.parse)
+        try:
+            url = f"https://{getattr(self, 'target')}"
+        except AttributeError:
+            print(
+                f'\n\nNo target given.\nRecommended usage: scrapy runspider {__file__} -O outfile.json -a target="example.com" -a [show-paths=true]\n\nExiting...\n'
+            )
+            return
+
+        try:
+            self.show_paths = getattr(self, "show-paths")
+        except AttributeError:
+            pass
+
+        yield scrapy.Request(url=url, callback=self.parse)
 
     def parse(self, response):
 
-        # TODO: make this yield somehow optional, maybe via CL argument
-        yield {
-            "type": "visited path",
-            "href": response.url,
-        }
+        if self.show_paths == "true":
+            yield {
+                "type": "visited",
+                "href": response.url,
+            }
 
-        # regex from https://emailregex.com/
+        # regex taken from https://emailregex.com/
         # will NOT find things like abc (at) xyz.com etc,
         # only clean mail addresses
         mails = re.findall(
@@ -57,10 +71,9 @@ class MailcollectSpider(scrapy.Spider):
                     "address": mail,
                 }
 
-        # crawling
         page_links = response.css("a")
 
         for anchor in page_links:
             href = anchor.css("a::attr(href)").get()
-            if "vereinigte-hagel.net" in href:
+            if getattr(self, "target") in href or href.startswith("/"):
                 yield response.follow(anchor, self.parse)
