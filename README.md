@@ -24,7 +24,9 @@ Familiarize yourself with scrapy.
 
 `pipenv install` (pip users: `python -m pip install -r requirements.txt`)
 
-`cd scrapy`collector/` `scrapy crawl <spider> <options>` (see examples below)
+`cd scrapy scrapy_collector/`
+
+`scrapy crawl <spider> <options>` (see examples below)
 
 ---
 
